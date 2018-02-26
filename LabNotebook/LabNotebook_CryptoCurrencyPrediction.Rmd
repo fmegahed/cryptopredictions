@@ -1,0 +1,38 @@
+---
+title: "Lab Notebook for CryptoCurrency Prediction Paper"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    number_sections: true
+    toc_depth: 2
+    toc_float: true
+---
+
+# Data Collection
+
+## Prices & Volume of Top Five Coins
+Based on the website [Coin Market Cap](https://coinmarketcap.com/coins/), the following cryptocurrencies were the top 5 by market cap on 2-26-2018:    
+* Bitcoin (\$BTC)    
+* Ethereum (\$ETC)    
+* Ripple (\$XRP)  
+* Bitcoin Cash (\$BCH)  
+* Litecoin (\$LTC)   
+  
+The R code below was used for data collection. The results were saved into [CryptoData-26-2-2018.RData](https://github.com/fmegahed/cryptopredictions/blob/master/LabNotebook/CryptoData-26-2-2018.RData) (which can be accessed by clicking the link on the hyperlink.) Note that the output includes a time-series object for each currency, which has the following variables/columns:   
+* Open   
+* High   
+* Low   
+* Close   
+* Volume   
+* Adjusted   
+   
+The reader is referred to the [Quantmod Package Documentation](https://cran.r-project.org/web/packages/quantmod/quantmod.pdf) for more details on the getSymbols() function.   
+   
+```{r message=FALSE, warning=FALSE}
+library(quantmod) #[Ran in Console to Avoid Multiple Loads]
+getSymbols(c("BTC-USD","ETH-USD","XRP-USD","BCH-USD","LTC-USD"))
+save.image(file = "CryptoData-26-2-2018.RData")
+```
+
+
