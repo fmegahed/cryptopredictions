@@ -19,7 +19,7 @@ Based on the website [Coin Market Cap](https://coinmarketcap.com/coins/), the fo
 * Bitcoin Cash (\$BCH)  
 * Litecoin (\$LTC)   
   
-The R code below was used for data collection. The results were saved into [CryptoData-26-2-2018.RData](https://github.com/fmegahed/cryptopredictions/blob/master/LabNotebook/CryptoData-26-2-2018.RData) (which can be accessed by clicking the link on the hyperlink.) Note that the output includes a time-series object for each currency, which has the following variables/columns:   
+The R code below was used for data collection. The results were saved into [CryptoData-26-2-2018.RData](https://github.com/fmegahed/cryptopredictions/blob/master/Code/DataCollection/Data/CryptoData-26-2-2018.RData) (which can be accessed by clicking the link on the hyperlink.) Note that the output includes a time-series object for each currency, which has the following variables/columns:   
 * Open   
 * High   
 * Low   
@@ -39,7 +39,7 @@ save.image(file = "CryptoData-26-2-2018.RData")
 ## Extracting Changes in Github Repositories for Each Coin
 ### Bitcoin
 #### Release Versions and Dates
-The R code below was used for scraping the Github Release Pages for Bitcoin. The results were saved into [BitCoinGitHub-26-2-2018.RData](https://github.com/fmegahed/cryptopredictions/blob/master/LabNotebook/BitcoinGitHub-26-2-2018.RData) (which can be accessed by clicking the link on the hyperlink.) Note that the output includes two data frames:   
+The R code below was used for scraping the Github Release Pages for Bitcoin. The results were saved into [BitCoinGitHub-26-2-2018.RData](https://github.com/fmegahed/cryptopredictions/blob/master/Code/DataCollection/Data/BitcoinGitHub-26-2-2018.RData) (which can be accessed by clicking the link on the hyperlink.) Note that the output includes two data frames:   
 * unverified (191 observations for 191 unverified and verified releases of the software)   
 * verified (19 observations corresponding to the major/verified updates in the Bitcoin software)   
 The reader should note that the scraped dates will need further pre-processing, which we will pursue in a subsequent step. 
@@ -96,5 +96,7 @@ while (url.extension!="v0.1.5") {
 verified.btc <- data.frame(cbind(verified.releases.dates,verified.releases))
 unverified.btc <- data.frame(cbind(dates,releases))
 save(verified.btc,unverified.btc,file = "BitcoinGitHub-26-2-2018.RData")
-
 ```
+Based on the code above, the number of rows for the unverified data.frame (i.e. total of verified and unverified releases) matched our expectation from: ![Screen Capture of the State of the Bitcoin Software as of 2-26-2018](/Figures/validate.all.releases.bitcoin.JPG)
+
+### Ethereum
