@@ -1,0 +1,23 @@
+---
+title: "Lab Notebook for Data Collection"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Collecting the prices of the top 5 crypto currencies by market cap
+
+Based on the website [Coin Market Cap](https://coinmarketcap.com/coins/), the following cryptocurrencies were the top 5 by market cap on 2-26-2018:    
+* Bitcoin (\$BTC)    
+* Ethereum (\$ETC)    
+* Ripple (\$XRP)  
+* Bitcoin Cash (\$BCH)  
+* Litecoin (\$LTC)  
+
+```{r message=FALSE, warning=FALSE}
+library(quantmod) #[Ran in Console to Avoid Multiple Loads]
+getSymbols(c("BTC-USD","ETH-USD","XRP-USD","BCH-USD","LTC-USD"))
+save.image(file = "CryptoData-26-2-2018.RData")
+```
+
+
