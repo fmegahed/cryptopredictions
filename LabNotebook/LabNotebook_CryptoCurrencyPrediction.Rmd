@@ -5,7 +5,7 @@ output:
     df_print: paged
     toc: true
     number_sections: true
-    toc_depth: 2
+    toc_depth: 3
     toc_float: true
 ---
 
@@ -29,10 +29,72 @@ The R code below was used for data collection. The results were saved into [Cryp
    
 The reader is referred to the [Quantmod Package Documentation](https://cran.r-project.org/web/packages/quantmod/quantmod.pdf) for more details on the getSymbols() function.   
    
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, eval=FALSE}
 library(quantmod) #[Ran in Console to Avoid Multiple Loads]
 getSymbols(c("BTC-USD","ETH-USD","XRP-USD","BCH-USD","LTC-USD"))
 save.image(file = "CryptoData-26-2-2018.RData")
 ```
+   
+   
+## Extracting Changes in Github Repositories for Each Coin
+### Bitcoin
+#### Release Versions and Dates
+The R code below was used for scraping the Github Release Pages for Bitcoin. The results were saved into [BitCoinGitHub-26-2-2018.RData](https://github.com/fmegahed/cryptopredictions/blob/master/LabNotebook/BitcoinGitHub-26-2-2018.RData) (which can be accessed by clicking the link on the hyperlink.) Note that the output includes two data frames:   
+* unverified (191 observations for 191 unverified and verified releases of the software)   
+* verified (19 observations corresponding to the major/verified updates in the Bitcoin software)   
+The reader should note that the scraped dates will need further pre-processing, which we will pursue in a subsequent step. 
 
+```{r message=FALSE, warning=FALSE, eval=FALSE, tidy=TRUE, tidy.opts=list(comment=FALSE)}
+#install.packages("pacman") # Unhash if not installed
+pacman::p_load(rvest,gsubfn,stringr) # allows multiple loading
 
+# Scraping the Data:
+# ------------------
+base.url <-"https://github.com/bitcoin/bitcoin/releases?after="
+url.git <- "https://github.com/bitcoin/bitcoin/releases?after="
+# Initilization for looping
+verified.releases <- {}
+releases <- {}
+verified.releases.dates <- {}
+dates <- {}
+url.extension <- "placeholder"
+# Looping through all bitcoin releases on github
+while (url.extension!="v0.1.5") {
+  # Step 1: Reading the Data
+  github.contents <- readLines(url.git)
+  # Step 2: Scraping the data pertaining
+  # (A) Obtaining all releases in the url (pages increment)
+  releases.holder <- as.data.frame(strapplyc(github.contents,"href=\"/bitcoin/bitcoin/releases/tag/(.*?)\">",simplify = rbind))
+  # (B) Obtaining all dates in the url (pages increment)
+  dates.holder <- as.data.frame(strapplyc(github.contents, "<relative-time datetime=(.*?) ",simplify = rbind))
+  # Step 3: Ensuring that releases and dates match
+    # Checked to work in Bitcoin
+  if (nrow(dates.holder) != nrow(releases.holder)){
+    dates.holder <- unique(dates.holder)
+  }
+  # Step 4: Getting all verified releases (easier using rvest)
+  alt.github.contents <- read_html(url.git)
+  verified.releases.holder <- html_nodes(alt.github.contents,"a >                               span.css-truncate-target")
+  verified.releases.holder <- data.frame(html_text(verified.releases.holder))
+  verified.releases.dates.holder <- html_nodes(alt.github.contents,"p > relative-time")
+  verified.releases.dates.holder <- data.frame(html_text(verified.releases.dates.holder))
+  
+  # Storing the data
+  verified.releases <- rbind(verified.releases,verified.releases.holder)
+  releases <- rbind(releases,releases.holder)
+  verified.releases.dates <- rbind(verified.releases.dates, verified.releases.dates.holder)
+  dates <- rbind(dates,dates.holder)
+  
+  # Going to the next page
+  url.extension <- as.character(releases.holder[nrow(releases.holder),1])
+  url.git <- paste(base.url,url.extension,sep = "")
+  Sys.sleep(2)
+}
+
+# Saving the data
+
+verified.btc <- data.frame(cbind(verified.releases.dates,verified.releases))
+unverified.btc <- data.frame(cbind(dates,releases))
+save(verified.btc,unverified.btc,file = "BitcoinGitHub-26-2-2018.RData")
+
+```

@@ -126,7 +126,7 @@ $(document).ready(function ()  {
 
     // establish options
     var options = {
-      selectors: "h1,h2",
+      selectors: "h1,h2,h3",
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
@@ -241,9 +241,72 @@ div.tocify {
 * Adjusted</p>
 <p>The reader is referred to the <a href="https://cran.r-project.org/web/packages/quantmod/quantmod.pdf">Quantmod Package Documentation</a> for more details on the getSymbols() function.</p>
 <pre class="r"><code>library(quantmod) #[Ran in Console to Avoid Multiple Loads]
-getSymbols(c(&quot;BTC-USD&quot;,&quot;ETH-USD&quot;,&quot;XRP-USD&quot;,&quot;BCH-USD&quot;,&quot;LTC-USD&quot;))</code></pre>
-<pre><code>## [1] &quot;BTC-USD&quot; &quot;ETH-USD&quot; &quot;XRP-USD&quot; &quot;BCH-USD&quot; &quot;LTC-USD&quot;</code></pre>
-<pre class="r"><code>save.image(file = &quot;CryptoData-26-2-2018.RData&quot;)</code></pre>
+getSymbols(c(&quot;BTC-USD&quot;,&quot;ETH-USD&quot;,&quot;XRP-USD&quot;,&quot;BCH-USD&quot;,&quot;LTC-USD&quot;))
+save.image(file = &quot;CryptoData-26-2-2018.RData&quot;)</code></pre>
+</div>
+<div id="extracting-changes-in-github-repositories-for-each-coin" class="section level2">
+<h2><span class="header-section-number">1.2</span> Extracting Changes in Github Repositories for Each Coin</h2>
+<div id="bitcoin" class="section level3">
+<h3><span class="header-section-number">1.2.1</span> Bitcoin</h3>
+<div id="release-versions-and-dates" class="section level4">
+<h4><span class="header-section-number">1.2.1.1</span> Release Versions and Dates</h4>
+<p>The R code below was used for scraping the Github Release Pages for Bitcoin. The results were saved into <a href="https://github.com/fmegahed/cryptopredictions/blob/master/LabNotebook/BitcoinGitHub-26-2-2018.RData">BitCoinGitHub-26-2-2018.RData</a> (which can be accessed by clicking the link on the hyperlink.) Note that the output includes two data frames:<br />
+* unverified (191 observations for 191 unverified and verified releases of the software)<br />
+* verified (19 observations corresponding to the major/verified updates in the Bitcoin software)<br />
+The reader should note that the scraped dates will need further pre-processing, which we will pursue in a subsequent step.</p>
+<pre class="r"><code>#install.packages(&quot;pacman&quot;) # Unhash if not installed
+pacman::p_load(rvest,gsubfn,stringr) # allows multiple loading
+
+# Scraping the Data:
+# ------------------
+base.url &lt;-&quot;https://github.com/bitcoin/bitcoin/releases?after=&quot;
+url.git &lt;- &quot;https://github.com/bitcoin/bitcoin/releases?after=&quot;
+# Initilization for looping
+verified.releases &lt;- {}
+releases &lt;- {}
+verified.releases.dates &lt;- {}
+dates &lt;- {}
+url.extension &lt;- &quot;placeholder&quot;
+# Looping through all bitcoin releases on github
+while (url.extension!=&quot;v0.1.5&quot;) {
+  # Step 1: Reading the Data
+  github.contents &lt;- readLines(url.git)
+  # Step 2: Scraping the data pertaining
+  # (A) Obtaining all releases in the url (pages increment)
+  releases.holder &lt;- as.data.frame(strapplyc(github.contents,&quot;href=\&quot;/bitcoin/bitcoin/releases/tag/(.*?)\&quot;&gt;&quot;,simplify = rbind))
+  # (B) Obtaining all dates in the url (pages increment)
+  dates.holder &lt;- as.data.frame(strapplyc(github.contents, &quot;&lt;relative-time datetime=(.*?) &quot;,simplify = rbind))
+  # Step 3: Ensuring that releases and dates match
+    # Checked to work in Bitcoin
+  if (nrow(dates.holder) != nrow(releases.holder)){
+    dates.holder &lt;- unique(dates.holder)
+  }
+  # Step 4: Getting all verified releases (easier using rvest)
+  alt.github.contents &lt;- read_html(url.git)
+  verified.releases.holder &lt;- html_nodes(alt.github.contents,&quot;a &gt;                               span.css-truncate-target&quot;)
+  verified.releases.holder &lt;- data.frame(html_text(verified.releases.holder))
+  verified.releases.dates.holder &lt;- html_nodes(alt.github.contents,&quot;p &gt; relative-time&quot;)
+  verified.releases.dates.holder &lt;- data.frame(html_text(verified.releases.dates.holder))
+  
+  # Storing the data
+  verified.releases &lt;- rbind(verified.releases,verified.releases.holder)
+  releases &lt;- rbind(releases,releases.holder)
+  verified.releases.dates &lt;- rbind(verified.releases.dates, verified.releases.dates.holder)
+  dates &lt;- rbind(dates,dates.holder)
+  
+  # Going to the next page
+  url.extension &lt;- as.character(releases.holder[nrow(releases.holder),1])
+  url.git &lt;- paste(base.url,url.extension,sep = &quot;&quot;)
+  Sys.sleep(2)
+}
+
+# Saving the data
+
+verified.btc &lt;- data.frame(cbind(verified.releases.dates,verified.releases))
+unverified.btc &lt;- data.frame(cbind(dates,releases))
+save(verified.btc,unverified.btc,file = &quot;BitcoinGitHub-26-2-2018.RData&quot;)</code></pre>
+</div>
+</div>
 </div>
 </div>
 
