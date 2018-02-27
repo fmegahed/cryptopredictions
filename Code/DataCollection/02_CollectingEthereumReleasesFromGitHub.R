@@ -6,7 +6,7 @@
 # See Lines 46-49 for a more detailed explanation
 
 
-setwd("C:/Users/megahefm/Google Drive/Miami/Research/2018/cryptopredictions/Code/DataCollection")
+setwd("C:/Users/megahefm/Google Drive/Miami/Research/2018/cryptopredictions/Code/DataCollection/")
 
 # Installing the required libraries
 #----------------------------------
@@ -59,4 +59,4 @@ totalexpected <- 125
 total.scraped.and.manually.counted <- length(other.not.counted) + nrow(release.ethereum) +  releases.after.0.5.18
 
 save(release.ethereum,total.scraped.and.manually.counted,totalexpected,
-     file = "C:/Users/megahefm/Google Drive/Miami/Research/2018/cryptopredictions/LabNotebook/ethereumGitHub-26-2-2018.RData")
+     file = "Data/EthereumGitHub-26-2-2018.RData")
