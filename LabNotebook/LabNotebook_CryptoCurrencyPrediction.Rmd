@@ -149,5 +149,5 @@ other.not.counted <- c('v0.6.3','v0.6.4','v0.6.5-1','v0.6.5-2','PoC6','vv0.7.10'
 totalexpected <- 125
 total.scraped.and.manually.counted <- length(other.not.counted) + nrow(release.ethereum) +  releases.after.0.5.18
 
-save(release.ethereum,total.scraped.and.manually.counted,totalexpected, file = "C:/Users/megahefm/Google Drive/Miami/Research/2018/cryptopredictions/LabNotebook/ethereumGitHub-26-2-2018.RData")
+save(release.ethereum,total.scraped.and.manually.counted,totalexpected, file = "Data/EthereumGitHub-26-2-2018.RData")
 ```
