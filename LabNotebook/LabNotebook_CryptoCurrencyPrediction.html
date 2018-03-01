@@ -232,6 +232,8 @@ div.tocify {
 * Ripple ($XRP)<br />
 * Bitcoin Cash ($BCH)<br />
 * Litecoin ($LTC)</p>
+<div id="collecting-daily-data" class="section level3">
+<h3><span class="header-section-number">1.1.1</span> Collecting Daily Data</h3>
 <p>The R code below was used for data collection. The results were saved into <a href="https://github.com/fmegahed/cryptopredictions/blob/master/Code/DataCollection/Data/CryptoData-26-2-2018.RData">CryptoData-26-2-2018.RData</a> (which can be accessed by clicking the link on the hyperlink.) Note that the output includes a time-series object for each currency, which has the following variables/columns:<br />
 * Open<br />
 * High<br />
@@ -243,6 +245,53 @@ div.tocify {
 <pre class="r"><code>library(quantmod) #[Ran in Console to Avoid Multiple Loads]
 getSymbols(c(&quot;BTC-USD&quot;,&quot;ETH-USD&quot;,&quot;XRP-USD&quot;,&quot;BCH-USD&quot;,&quot;LTC-USD&quot;))
 save.image(file = &quot;CryptoData-26-2-2018.RData&quot;)</code></pre>
+</div>
+<div id="collecting-hourly-data" class="section level3">
+<h3><span class="header-section-number">1.1.2</span> Collecting Hourly Data</h3>
+<p>To provide us with the opportunity to predict smaller time frames, we used the <a href="https://min-api.cryptocompare.com/">Crypto Compare API</a> to obtain historical prices for each of our 5 coins. Using UTC/GMT time, we limited our search to prices from January 01, 2016 (midnight UTC) to February 28, 2018 (23:00 UTC). The code below is what we used for our analysis. In the code, the printout line before the save was used to verify that we indeed captured data on the desired first and last time points.</p>
+<pre class="r"><code># Code: Written to Extract Hourly Prices and Volumes for our five cryptocurrencies
+# Using the Crypto Compare API: https://min-api.cryptocompare.com/
+
+# Loading Needed Libraries
+library(jsonlite)
+
+
+# API Inputs
+coins &lt;- c(&quot;BTC&quot;,&quot;ETH&quot;,&quot;XRP&quot;,&quot;BCH&quot;,&quot;LTC&quot;) # he cryptocurrency symbol of interest [Max length: 10]
+measured.in &lt;- &quot;USD&quot; # The currency symbol to convert into [Max length: 10]
+exchange &lt;- &quot;CCCAGG&quot; # Default (thus, not used): CCCAG, which is Cryptocurrency compare's aggregation of exchanges
+baseurl &lt;- &quot;https://min-api.cryptocompare.com/data/histohour?fsym=&quot;
+num.data.points &lt;- as.character(2000) # We were limited to 2001 when I tried it on 2/28/18
+# Creating the inputs needed for the for loop to extract the data
+first.Ts.time &lt;- as.numeric(as.POSIXct(&quot;2016-01-01 0:00&quot;, tz=&quot;GMT&quot;))+ (3600*2000)
+TimeTs &lt;- seq(first.Ts.time,1519858800,(3600*2000)) # Unix Time Stamps; second input is 23 pm 2-28-2018 UTC;
+# and third input is to incrument it by 2000 hours)
+TimeTs.include.current.time &lt;- c(TimeTs,1519858800)
+
+# ----------------------Two Nested for Loops for extracting the data needed-----------------------------------
+# Outer loop is for each coin and the
+# inner loop is to iterate through the API so we have the data from January 1, 2016 to Feb 28, 2018 (UTC Times)
+results &lt;- list() # initializing the results list (made of five sub lists; one for each coin)
+for (counter in 1:length(coins)) {
+  data.holder &lt;- {} # place holder for data, which we will overwrite
+  for (id in 1:length(TimeTs.include.current.time)) {
+    api.call &lt;- paste(baseurl,coins[counter],&quot;&amp;tsym=&quot;,measured.in,&quot;&amp;limit=&quot;,
+                      num.data.points,&quot;&amp;aggregate=1&amp;toTs=&quot;,
+                      TimeTs.include.current.time[id],sep=&quot;&quot;) # api call with prespecified parameters
+    data.holder &lt;- rbind(data.holder,fromJSON(api.call)$Data) # R Binding the data (to create one large df per coin)
+  Sys.sleep(1) # Pause 1 second
+  }
+  results[[counter]] &lt;- data.holder # A list of results time, close, high, open, volume
+}
+# Checking the time of the last observations
+print(as.POSIXct(data.holder$time[nrow(data.holder)],origin=&quot;1970-01-01&quot;))
+# investigating how the API handled the Release of BCH (i.e. values before the release on August 1, 2017)
+table(results[[4]][1:100,'close']) # We know for sure that the first 100 values should either be NA or zeros.
+# Output showed that they were treated as zeros by the API
+save(results,
+     file=&quot;C:/Users/megahefm/Google Drive/Miami/Research/2018/cryptopredictions/Code/DataCollection/Data/HourlyPrices-28-2-2018.RData&quot;)</code></pre>
+<p>Our initial results from running the code above is stored at: <a href="https://github.com/fmegahed/cryptopredictions/blob/master/Code/DataCollection/Data/HourlyPrices-28-2-2018.RData">HourlyPrices-28-2-2018.RData</a> (which can be accessed by clicking the link on the hyperlink.) Note that we will need to clean this data prior to conducting any analysis; for example, BCH was forked on August 1, 2017 and this is why the API returned zeros for all the variables (with the exception of the time stamp) before that date. See <a href="https://github.com/fmegahed/cryptopredictions/blob/master/LabNotebook/Figures/Example.how.API.handling.BCH.before.Release.Date.JPG">Screen Capture of the BCH data (Output using the base R str function)</a>. <strong>This will be addressed in the data cleaning/modeling.</strong></p>
+</div>
 </div>
 <div id="extracting-changes-in-github-repositories-for-each-coin" class="section level2">
 <h2><span class="header-section-number">1.2</span> Extracting Changes in Github Repositories for Each Coin</h2>
