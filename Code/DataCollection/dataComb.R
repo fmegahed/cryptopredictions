@@ -2,9 +2,13 @@
 coins <- c("BTC","ETH","XRP","BCH","LTC")
 library(tidyverse)
 library(anytime)      # use anytime() for converting UTC to Date-Time form
+user <- Sys.info() %>% .['user']
+fpath <- paste0('/Users/', user, 
+                '/Documents/GitHub/cryptopredictions/Code/DataCollection/Data/')
 
 #### CryptoCompare Hourly Prices ####
-load("~/GitHub/cryptopredictions/Code/DataCollection/Data/HourlyPrices-28-2-2018.RData") # only one dataset to load
+load(paste0(fpath,
+            "HourlyPrices-28-2-2018.RData")) # only one dataset to load
 datHP <- results; rm(results)
 for (i in 1:length(coins)){
   datHP[[i]] <- datHP[[i]] %>% 
@@ -14,7 +18,6 @@ for (i in 1:length(coins)){
 }
 
 #### GitHub coin version & posting dates ####
-fpath <- "~/GitHub/cryptopredictions/Code/DataCollection/Data/"
 dir <- paste0(fpath,
               c("BitcoinGitHub-26-2-2018.RData",
                 "EthereumGitHub-2018-03-15.RData"))
@@ -58,3 +61,6 @@ for (i in match(c('BTC', 'ETH'), coins)) { #match as index is temporary until al
 datFinal <- datComb %>%
   reduce(function(df1, df2) full_join(df1, df2,
                                       by = names(.[[1]])))
+
+save(datFinal, file = paste0(fpath, "price_version_comb_BTC_ETH-", 
+                             Sys.Date(), ".RData"))
