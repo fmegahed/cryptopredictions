@@ -1,0 +1,648 @@
+---
+title: "Applications of Artificial Intelligence to Financial Time Series Forecasting:
+  An Overview and Comparison"
+author:
+  - Robert Leonard^[Department of Information Systems \& Analytics, Miami University]
+  - Waldyn Martinez^[Department of Information Systems \& Analytics, Miami University. This author can be reached by email at [martinwg@miamioh.edu](mailto:martinwg@miamioh.edu).]
+  - Manar Kasem^[Department of Computer Science \& Software Engineering, Miami University]
+  - Fadel Megahed^[Department of Information Systems \& Analytics, Miami University]
+  - Sooyeung Lim^[Department of Statistics, Miami University]
+  - Arthur Carvalho^[Department of Information \& Analytics, Miami University]
+
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Overview
+The main goal of this paper is to **review** the most prominent machine learning and deep learning techniques developed more recently in the area of time series analysis. There should be papers reviewing literature in this area but I think that the introduction of deep learning techniques begs for a review and comparison, along with implementation recommendations for practitioners. I think for this paper we would want to consider time series with no predictors other than the lagged values of the series. That is, we can only predict the series $t_t$, which we assume to have a form: $y_t = g(t) + \epsilon_t$, by using $\hat{g}(t)$ consisting of lagged values of $t$.
+
+My suggestion is that we review the latest developments for the following main areas:
+
+* Neural Networks
+* Support Vector Machines
+* Ensemble Methods (extreme gradient boosting, random forests, averaged neural networks, etc)
+* Hybrid Methods (ANNs with ARIMA, SVMs with ARIMA, etc)
+* Deep Learning (RNNs, CNNs, LSTMs, GRUs)
+
+We would compare these methods to more traditional techniques such as:
+
+* ARIMA
+* GARCH
+
+To better understand the proposed paper see a sample introduction below:
+
+<span style="color:red">
+The evolution of machine learning and deep learning methodologies has improved significantly the performance of financial time series forecasting. In this paper we review the most significant contributions of machine learning to the field, including the use of the most state-of-art methods based on deep learning techniques, such as Long-Short Term Memory Networks and Gated Recurrent Units. We evaluate some of the leading implementations by comparing their performance on a variety of financial stocks, indices and cryptocurrencies.  We make the code available to the public in an effort to disseminate and promote the use of the methods evaluated here in the field.
+</span>
+
+## Target Journals
+
+We can try the following journals:
+
+* Applied Soft Computing (Considered group I)
+* Expert Systems with Applications (considered group I)
+* WIREs data mining and knowledge discovery (considered group II, faster turnaround)
+
+
+
+## Steps Needed
+
+For each of the areas analyzed we have to talk and maybe illustrate with charts how the methods are structured, parameters that need to be optimized, advantages and disadvantages and finally a review of the implentations (including the choice of parameters used) on the literature (with financial stocks, bonds, indices, commodities, cryptocurrencies, etc).
+
+In addition to that we can choose the most prominent implementations and compare the methods for different financial time series.  We also want to provide code in R and hopefully also in Python.
+
+**Ideally, we could divide this work (literature review), so that we can get the paper out faster**
+
+## Overview of Data
+
+
+Traditional time-series models attempt to capture the dependence of variable $y$ to its time unit $t$ by estimating the systematic component $g(t)$. How the series changes over time depends on many factors, including whether there is a trend, whether the series is stationary, whether there is a seasonal component.  Let's take a quick look at the structure of some of the financial time series we want to study:
+
+
+```{r, eval = FALSE, echo = FALSE}
+library(caret)
+library(mlbench)
+library(quantregForest)
+library(qrnn)
+library(rugarch)
+library(rsample)
+library(forecast)
+library(rugarch)
+library(fGarch)
+library(forecastxgb)
+library(keras)
+library(ggplot2)
+library(reshape2)
+library(anytime)
+```
+
+```{r,  message=FALSE}
+library(pacman)
+p_load(ggplot2)
+p_load(anytime)
+p_load(xts)
+p_load(quantmod)
+p_load(timeSeries)
+p_load(forecastxgb)
+p_load(caret)
+p_load(e1071)
+p_load(forecast)
+p_load(forecastxgb)
+```
+
+```{r}
+Coin <- read.csv("litecoin_price.csv")
+Close <- rev(Coin$Close)
+Date <- as.Date(anytime(rev(Coin$Date)))
+#Coin$Date <- as.Date(anytime(Coin$Date))
+Coin <- data.frame(Date, Close)
+Returns <- data.frame(Coin$Date[-1], returns(ts(Coin$Close))[-1])
+names(Returns) <- c("Date", "Close")
+litecoin <- data.frame(Coin, returns(ts(Coin$Close)))
+names(litecoin) <- c("Date", "Close", "Return")
+litecoin
+test <- Coin[Coin$Date > "2018-02-06",]
+train <- Coin[Coin$Date <= "2018-02-06",]
+testReturns <- Returns[Returns$Date > "2018-02-06",]
+trainReturns <- Returns[Returns$Date <= "2018-02-06",]
+# trainReturns <- returns (train1$Close)[-1]
+# trainReturns <- data.frame(train1$Date[-1],trainReturns)
+# names(trainReturns) <- c("Date", "Close")
+
+# testReturns <- returns (test1$Close)[-1]
+# testReturns <- data.frame(test1$Date[-1],testReturns)
+# names(testReturns) <- c("Date", "Close")
+```
+
+### Creating lagged values to use as predictors
+
+Some of the methods we use take into account that the data is a time series and automatically used lagged predictors. For those methods that do not, we want to create lagged variables as predictors. The main drawback is that we would not know how many lagged periods to use. To get started, we can lagged the example by 10 days knowing that we have to find a way to determine the optimal number of predictors later.
+
+```{r}
+lagsvars <- 14
+feature = cbind(Lag(train$Close,1),Lag(train$Close,2), Lag(train$Close,3),
+                Lag(train$Close,4), Lag(train$Close,5), Lag(train$Close,6), Lag(train$Close,7), Lag(train$Close,8), Lag(train$Close,9), Lag(train$Close,10), Lag(train$Close,11), Lag(train$Close,12), Lag(train$Close,13), Lag(train$Close,14), train$Close)[-(1:lagsvars),]
+colnames(feature) = c( "n.lag.1", "n.lag.2", "n.lag.3", "n.lag.4", "n.lag.5", "n.lag.6", "n.lag.7", "n.lag.8", "n.lag.9", "n.lag.10", "n.lag.11", "n.lag.12", "n.lag.13", "n.lag.14",'TARGET' )
+
+
+featuretest = cbind(as.numeric(na.omit(c(tail(train$Close,1),Lag(test$Close,1)))),  as.numeric(na.omit(c(tail(train$Close,2),Lag(test$Close,2)))) , as.numeric(na.omit(c(tail(train$Close,3),Lag(test$Close,3)))), as.numeric(na.omit(c(tail(train$Close,4),Lag(test$Close,4)))), as.numeric(na.omit(c(tail(train$Close,5),Lag(test$Close,5)))),
+as.numeric(na.omit(c(tail(train$Close,6),Lag(test$Close,6)))), as.numeric(na.omit(c(tail(train$Close,7),Lag(test$Close,7)))), as.numeric(na.omit(c(tail(train$Close,8),Lag(test$Close,8)))), as.numeric(na.omit(c(tail(train$Close,9),Lag(test$Close,9)))), as.numeric(na.omit(c(tail(train$Close,10),Lag(test$Close,10)))), as.numeric(na.omit(c(tail(train$Close,11),Lag(test$Close,11)))), as.numeric(na.omit(c(tail(train$Close,12),Lag(test$Close,12)))), as.numeric(na.omit(c(tail(train$Close,13),Lag(test$Close,13)))), as.numeric(na.omit(c(tail(train$Close,14),Lag(test$Close,14)) )), test$Close)
+colnames(featuretest) = c( "n.lag.1", "n.lag.2", "n.lag.3", "n.lag.4", "n.lag.5", "n.lag.6", "n.lag.7", "n.lag.8", "n.lag.9", "n.lag.10", "n.lag.11", "n.lag.12", "n.lag.13", "n.lag.14", 'TARGET' )
+
+featuretest <- data.frame(featuretest)
+featuretest
+
+featureret = cbind(Lag(trainReturns$Close,1),Lag(trainReturns$Close,2), Lag(trainReturns$Close,3),
+                Lag(trainReturns$Close,4), Lag(trainReturns$Close,5), Lag(trainReturns$Close,6), Lag(trainReturns$Close,7), Lag(trainReturns$Close,8), Lag(trainReturns$Close,9), Lag(trainReturns$Close,10), Lag(trainReturns$Close,11), Lag(trainReturns$Close,12), Lag(trainReturns$Close,13), Lag(trainReturns$Close,14), trainReturns$Close)[-(1:lagsvars),]
+colnames(featureret) = c( "n.lag.1", "n.lag.2", "n.lag.3", "n.lag.4", "n.lag.5", "n.lag.6", "n.lag.7", "n.lag.8", "n.lag.9", "n.lag.10", "n.lag.11", "n.lag.12", "n.lag.13", "n.lag.14", 'TARGET' )
+
+
+featuretestret = cbind(as.numeric(na.omit(c(tail(trainReturns$Close,1),Lag(testReturns$Close,1)))),  as.numeric(na.omit(c(tail(trainReturns$Close,2),Lag(testReturns$Close,2)))) , as.numeric(na.omit(c(tail(trainReturns$Close,3),Lag(testReturns$Close,3)))), as.numeric(na.omit(c(tail(trainReturns$Close,4),Lag(testReturns$Close,4)))), as.numeric(na.omit(c(tail(trainReturns$Close,5),Lag(testReturns$Close,5)))),
+as.numeric(na.omit(c(tail(trainReturns$Close,6),Lag(testReturns$Close,6)))), as.numeric(na.omit(c(tail(trainReturns$Close,7),Lag(testReturns$Close,7)))), as.numeric(na.omit(c(tail(trainReturns$Close,8),Lag(testReturns$Close,8)))), as.numeric(na.omit(c(tail(trainReturns$Close,9),Lag(testReturns$Close,9)))), as.numeric(na.omit(c(tail(trainReturns$Close,10),Lag(testReturns$Close,10)))), as.numeric(na.omit(c(tail(trainReturns$Close,11),Lag(testReturns$Close,11)))), as.numeric(na.omit(c(tail(trainReturns$Close,12),Lag(testReturns$Close,12)))), as.numeric(na.omit(c(tail(trainReturns$Close,13),Lag(testReturns$Close,13)))), as.numeric(na.omit(c(tail(trainReturns$Close,14),Lag(testReturns$Close,14)) )), testReturns$Close)
+colnames(featuretestret) = c( "n.lag.1", "n.lag.2", "n.lag.3", "n.lag.4", "n.lag.5", "n.lag.6", "n.lag.7", "n.lag.8", "n.lag.9", "n.lag.10","n.lag.11", "n.lag.12", "n.lag.13", "n.lag.14", 'TARGET' )
+
+featuretestret <- data.frame(featuretestret)
+featuretestret
+
+```
+
+### Plotting the series
+
+As most cryptocurrencies it seems the data is highly non-stationary, with increasing variability the last few months. 
+
+```{r, results='asis'}
+p_load(dygraphs)
+Train <- xts(train[, -1], order.by = as.POSIXct(train$Date)) 
+names(Train) <- "LiteCoin"
+tsr <- ts(Train[,1], frequency = 365.25,start = c(2013,4,28))
+dygraph(Train, xlab = "Date", ylab = "Closing Price", main = "LiteCoin Price") %>%
+ # dySeries(labels.default()) %>%
+   dyOptions(colors = c("red")) %>%
+  dyRangeSelector()
+
+TrainReturns <- xts(trainReturns[, -1], order.by = as.POSIXct(trainReturns$Date)) 
+names(TrainReturns) <- "LiteCoin"
+tsr1 <- ts(TrainReturns[,1], frequency = 365.25,start = c(2013,4,28))
+dygraph(TrainReturns, xlab = "Date", ylab = "Returns", main = "LiteCoin Returns") %>%
+ # dySeries(labels.default()) %>%
+   dyOptions(colors = c("red")) %>%
+  dyRangeSelector()
+```
+
+### Decompose the series
+
+We can use additive and  decomposition to determine if the series contains trend, seasonal or other components that could help in is prediction.
+
+```{r}
+dects <- decompose(tsr) #Obtaining the trends and seasonality
+dects1 <- decompose (tsr, type = c("multiplicative"))
+plot(dects, col = 'red')
+plot(dects1, col = 'red')
+```
+
+We can see that there is a seasonal component and a trend in the series. The random component also appears to be nonstationary, which means we might be able to further improve a decomposition-based model.
+
+Next, we will check how the models that compare:
+
+# Traditional Statistical Models
+
+ARIMA and GARCH are the main traditional time series modeling techniques. ARIMA is mainly used to estimate a linear time series, while GARCH models are mostly used to model nonstationarity in the variation of the series.
+
+## Auto-Regressive and Moving Average (ARIMA). 
+
+An auto-regressive (AR) model of order $p$ is used when a series is dependent upon $p$ lagged values of itself, while a moving average (MA) model of order $q$ is used when the series is expected to be a linear combination of the $q$ past forecast errors. This is a traditional statistical model, which we will mostly use as a comparison/baseline against the AI-based methods. We want to take a look at two approaches with modelling the time series considered:
+
+* Simple Implementation: I think that from the point of view of practitioners, it is difficult to think that they would be experts in these modelling techniques in terms of optimizing the parameters needed on each technique. Even if they are knowledgeable on how to fit the models and optimize the parameters, it might require considerable amount of work to optimize multiple series concurrently. Implementation performance can also degrade  So with a straight implementation we want to use the most **common** parameters used.
+
+* Optimized Implementation: An implementation with optimized parameters that shows at least how good the predictions can get if each series is analyzed more carefully.
+
+### Parameters to Optimize
+
+* $p$: lagged values of the variable, that is, $\{y_{t-1}, y_{t-2},...,y_{t-p}\}$
+* $q$: past forecast errors. $\{e_{t-1}, e_{t-2},...,e_{t-q}\}$ 
+* $d$: degree of differencing. E.g., for $d=1$, means our new series, say $x_t$, at time $t$ will be $x_{t} = y_t - y_{t-1}$.
+
+### ARIMA Simple Implementation
+In order to implement an ARIMA model we need to find the most appropriate values of $p$, $d$ and $q$. the common ways to do this is examine the ACF (auto-Correlation Function) and PACF (Partial Auto-Correlation Function) of the series to determine the optimal number of lags and lagged errors to consider. WE PROBABLY NEED TO SKIP THE STEPS ON PLOTTING THE ACFS AND PACFS AND JUST MENTION THAT THE SIMPLE IMPLEMENTATION USES THE VALUES RESULTING FROM VISUAL INSPECTIONS OF THE PLOTS.
+
+```{r}
+Acf(Train, lag.max=60)  
+Pacf(Train, lag.max = 60)
+```
+
+The plot of the ACF above shows the series might be a result of an AR(1) process. The significance of the first lag and then some other lags on the PACF plot might indicate we need differencing to make the process more stationary. This is very common when modelling prices as opposed to returns.
+
+```{r}
+Acf (diff(Train,1), lag.max = 60)
+Pacf (diff(Train,1), lag.max = 60)
+```
+
+
+### ARIMA Simple Implementation Performance
+
+We can see that ARIMA performs well with the 1- and 14-day ahead price predictions using an ARIMA(1,1,0) configuration given the inspection of the ACF and PACF charts. The ARIMA model degrades significantly predicting returns.
+
+```{r,  message=FALSE}
+p_load(forecast)
+#arimamodel <- auto.arima(rev(train$Close), seasonal=FALSE)
+arimamodel <- arima(train$Close, order = c(1,1,0))
+arimafcast1 <- forecast(arimamodel, h = 1)
+arimafcast1acc <- accuracy(arimafcast1$mean, test$Close[1])
+
+# 14 day prediction 
+arimafcast2 <- forecast(arimamodel, h = 14)
+arimafcast2acc <- accuracy(arimafcast2$mean, test$Close)
+
+arima.acc <- matrix(c(arimafcast1acc[2],arimafcast1acc[3], arimafcast1acc[5], arimafcast2acc[2],arimafcast2acc[3], arimafcast2acc[5]), nrow = 2, byrow = T)
+
+arima.acc <-data.frame(arima.acc)
+names(arima.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(arima.acc) <- c("1-day Pred Price", "14-day Pred Price")
+arima.acc
+
+
+
+
+
+predictions2 <- c(fitted(arimamodel),arimafcast2$mean)
+actual2 <- c(train$Close, test$Close)
+predact2 <- cbind(predictions2, actual2)
+arimaTT2 <- xts(predact2, order.by = as.POSIXct(c(train$Date, test$Date))) 
+names(arimaTT2) <- c("Predicted", "Actual")
+dygraph(arimaTT2, xlab = "Date", ylab = "Closing Price", main = "LiteCoin Price") %>%
+ # dySeries(labels.default()) %>%
+   dyOptions(colors = c("red", "blue")) %>%
+  dyRangeSelector()
+
+#arimamodelret <- auto.arima(rev(trainReturns$Close), seasonal=FALSE)
+arimamodelret <- arima(trainReturns$Close, order = c(2,1,0))
+arimafcastret <- forecast(arimamodelret, h = 1)
+arimaretfcast1acc <- accuracy(arimafcastret$mean, testReturns$Close[1])
+
+#14 day prediction (returns)
+arimafcastret2 <- forecast(arimamodelret, h = 14)
+arimaretfcast2acc <- accuracy(arimafcastret2$mean, testReturns$Close)
+
+arimaret.acc <- matrix(c(arimaretfcast1acc[2],arimaretfcast1acc[3], arimaretfcast1acc[5], arimaretfcast2acc[2],arimaretfcast2acc[3], arimaretfcast2acc[5]), nrow = 2, byrow = T)
+
+arimaret.acc <-data.frame(arimaret.acc)
+names(arimaret.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(arimaret.acc) <- c("1-day Pred Returns", "14-day Pred Returns")
+arimaret.acc
+
+
+predictions <- c(fitted(arimamodelret),arimafcastret2$mean)
+actual <- c(trainReturns$Close, testReturns$Close)
+predact <- cbind(predictions, actual)
+arimaTT2 <- xts(predact, order.by = as.POSIXct(c(trainReturns$Date, testReturns$Date)))
+names(arimaTT2) <- c("Predicted", "Actual")
+dygraph(arimaTT2, xlab = "Date", ylab = "Returns", main = "LiteCoin Return") %>%
+ # dySeries(labels.default()) %>%
+   dyOptions(colors = c("red", "blue")) %>%
+  dyRangeSelector()
+
+```
+
+
+### ARIMA Optimized Implementation Performance
+
+A grid search method is oftentimes preferred to obtain a better performing ARIMA model. In a grid search the parameters are selected such that we optimze a given criterion or criteria. We will use the function `auto.arima` from the package `forecast`. The `auto.arima` function obtains the optimal parameters $p$, $q$, and $d$ needed in the ARIMA ($p$, $d$ $q$) method such that the AIC is optimized. We will compare the day-ahead forecast and also a 10 day prediction.
+
+```{r,  message=FALSE}
+library(forecast)
+#arimamodel <- auto.arima(rev(train$Close), seasonal=FALSE)
+arimamodel <- auto.arima(train$Close, seasonal=FALSE)
+arimafcast1 <- forecast(arimamodel, h = 1)
+arimafcast1acc <- accuracy(arimafcast1$mean, test$Close[1])
+
+# 14 day prediction 
+arimafcast2 <- forecast(arimamodel, h = 14)
+arimafcast2acc <- accuracy(arimafcast2$mean, test$Close)
+
+arima.acc <- matrix(c(arimafcast1acc[2],arimafcast1acc[3], arimafcast1acc[5], arimafcast2acc[2],arimafcast2acc[3], arimafcast2acc[5]), nrow = 2, byrow = T)
+
+arima.acc <-data.frame(arima.acc)
+names(arima.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(arima.acc) <- c("1-day Pred Price", "14-day Pred Price")
+arima.acc
+
+#arimamodelret <- auto.arima(rev(trainReturns$Close), seasonal=FALSE)
+arimamodelret <- auto.arima(trainReturns$Close)
+arimafcastret <- forecast(arimamodelret, h = 1)
+arimaretfcast1acc <- accuracy(arimafcastret$mean, testReturns$Close[1])
+
+#14 day prediction (returns)
+arimafcastret2 <- forecast(arimamodelret, h = 14)
+arimaretfcast2acc <- accuracy(arimafcastret2$mean, testReturns$Close)
+
+arimaret.acc <- matrix(c(arimaretfcast1acc[2],arimaretfcast1acc[3], arimaretfcast1acc[5], arimaretfcast2acc[2],arimaretfcast2acc[3], arimaretfcast2acc[5]), nrow = 2, byrow = T)
+
+arimaret.acc <-data.frame(arimaret.acc)
+names(arimaret.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(arimaret.acc) <- c("1-day Pred Returns", "14-day Pred Returns")
+arimaret.acc
+```
+
+In this case using a seacrch grid does not translate into better test set performance an, in fact, both the 1-day and 14-day ahead predictive performance is worse for price and returns prediction.
+
+## Generalized Auto-Regressive Conditional Heteroscedasticity
+
+An ARCH model of order $p$ can be thought of as an AR(p) model applied to the variance of a time series. GARCH (p,q), on the other hand models the volatility of a series with non-stationary characteristics. Simply putm GARCH(p, q) is an ARMA model applied to the variance of a time series i.e., it has an autoregressive term and a moving average term. The AR(p) models the variance of the residuals (squared errors) or simply our time series squared. The MA(q) portion models the variance of the process. The basic GARCH(1, 1) formula is: $\sigma^2_t = \alpha_0 + \alpha_1a^2_{t-1}+\beta^2_{t-1}$. We will use the R function `ugarchfit` from the package `rugarch`.  For example using a GARCH(1,1) we can get the prediction performance below:
+
+### GARCH Simple Implementation Performance
+The most common GARCH implementation to predict volatile stock prices is GARCH(1,1). We will use these parameters here as our simple GARCH implementation.
+
+```{r, message=FALSE}
+p_load(rugarch)
+garchmodel <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(2,1)),  mean.model = list(armaOrder = c(1,1)), distribution.model = "std")
+garchmodelfit <- ugarchfit(spec = garchmodel, data = train$Close)
+garch.predict <- ugarchforecast (garchmodelfit, n.ahead = 1)
+garchfcast1 <-  as.numeric(fitted(garch.predict))
+garchfcast1acc <- accuracy(garchfcast1, test$Close[1])
+
+garch.predict2 <- ugarchforecast (garchmodelfit, n.ahead = 14)
+garchfcast2 <-  as.numeric(fitted(garch.predict2))
+garchfcast2acc<- accuracy(garchfcast2, test$Close)
+
+garch.acc <- matrix(c(garchfcast1acc[2],garchfcast1acc[3], garchfcast1acc[5], garchfcast2acc[2],garchfcast2acc[3], garchfcast2acc[5]), nrow = 2, byrow = T)
+
+garch.acc <-data.frame(garch.acc)
+names(garch.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(garch.acc) <- c("1-day Pred Price", "14-day Pred Price")
+garch.acc
+
+
+garchmodelRet <- ugarchfit(spec = garchmodel, data = trainReturns$Close)
+garch.predictRet <- ugarchforecast (garchmodelRet, n.ahead = 1)
+garchfcastRet <-  as.numeric(fitted(garch.predictRet))
+garchretfcast1acc <-accuracy(garchfcastRet, testReturns$Close[1])
+
+garch.predictRet2 <- ugarchforecast (garchmodelRet, n.ahead = 14)
+garchfcastRet2 <-  as.numeric(fitted(garch.predictRet2))
+
+garchretfcast2acc<- accuracy(garchfcastRet2, testReturns$Close)
+
+garchret.acc <- matrix(c(garchretfcast1acc[2],garchretfcast1acc[3], garchretfcast1acc[5], garchretfcast2acc[2],garchretfcast2acc[3], garchretfcast2acc[5]), nrow = 2, byrow = T)
+
+garchret.acc <-data.frame(garchret.acc)
+names(garchret.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(garchret.acc) <- c("1-day Pred Return", "14-day Pred Return")
+garchret.acc
+```
+
+### GARCH Optimized Implementation Performance
+We want to use a grid-search algorithm to find the optimized parameters of the GARCH model. To do this we loop over the values of $p$ and $q$ and determine which ha the lowest AIC value in the training data set. We obtain the `arma` order cross validation.
+
+
+```{r}
+library(rugarch)
+orders <- matrix(c(1,0, 1,1,1,2, 0,1, 0,2, 2,0,2,1,2,2, 3, 0, 3,1, 3,2),ncol  = 2, byrow = T)
+aic <- c()
+for (i in 1:11)
+{
+    garchmodel <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(orders[i,1],orders[i,2])), distribution.model = "std")
+    garchmodelfit <- ugarchfit(spec = garchmodel, data = train$Close)
+    aic[i] <- infocriteria(garchmodelfit)[1]
+    selectorder <- which.min(aic)
+}
+
+parms <- orders[selectorder,]
+
+garchmodel <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(parms[1],parms[2])), distribution.model = "std")
+garchmodelfit <- ugarchfit(spec = garchmodel, data = train$Close)
+garch.predict <- ugarchforecast (garchmodelfit, n.ahead = 1)
+garchfcast1 <-  as.numeric(fitted(garch.predict))
+garchfcast1acc <- accuracy(garchfcast1, test$Close[1])
+
+garch.predict2 <- ugarchforecast (garchmodelfit, n.ahead = 14)
+garchfcast2 <-  as.numeric(fitted(garch.predict2))
+garchfcast2acc<- accuracy(garchfcast2, test$Close)
+
+garch.acc <- matrix(c(garchfcast1acc[2],garchfcast1acc[3], garchfcast1acc[5], garchfcast2acc[2],garchfcast2acc[3], garchfcast2acc[5]), nrow = 2, byrow = T)
+
+garch.acc <-data.frame(garch.acc)
+names(garch.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(garch.acc) <- c("1-day Pred Price", "14-day Pred Price")
+garch.acc
+
+for (i in 1:11)
+{
+    garchmodel <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(orders[i,1],orders[i,2])), distribution.model = "std")
+    garchmodelfit <- ugarchfit(spec = garchmodel, data = trainReturns$Close)
+    aic[i] <- infocriteria(garchmodelfit)[1]
+    selectorderret <- which.min(aic)
+}
+
+parmsret <- orders[selectorderret,]
+garchmodel <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(parmsret[1],parmsret[2])), distribution.model = "std")
+
+garchmodelRet <- ugarchfit(spec = garchmodel, data = trainReturns$Close)
+garch.predictRet <- ugarchforecast (garchmodelRet, n.ahead = 1)
+garchfcastRet <-  as.numeric(fitted(garch.predictRet))
+garchretfcast1acc <-accuracy(garchfcastRet, testReturns$Close[1])
+
+garch.predictRet2 <- ugarchforecast (garchmodelRet, n.ahead = 14)
+garchfcastRet2 <-  as.numeric(fitted(garch.predictRet2))
+
+garchretfcast2acc<- accuracy(garchfcastRet2, testReturns$Close)
+
+garchret.acc <- matrix(c(garchretfcast1acc[2],garchretfcast1acc[3], garchretfcast1acc[5], garchretfcast2acc[2],garchretfcast2acc[3], garchretfcast2acc[5]), nrow = 2, byrow = T)
+
+garchret.acc <-data.frame(garchret.acc)
+names(garchret.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(garchret.acc) <- c("1-day Pred Return", "14-day Pred Return")
+garchret.acc
+```
+
+
+
+# Machine Learning Models
+
+We want to compare the more traditiona techniques to models that rely on machine learning or artificial intelligence. This is where we want to do literature review and make sure that we cover most bases on the models that are more significant. 
+
+## Artificial Neural Networks (MLP structure)
+from wikipedia: "Artificial neural networks (ANN) or connectionist systems are computing systems vaguely inspired by the biological neural networks that constitute animal brains. Such systems "learn" to perform tasks by considering examples, generally without being programmed with any task-specific rules." 
+
+### ANNs Simple Implementation Performance
+
+There are many packages we use to predict a time series using ANNs. We can use for now the package `nnfor`. Please let me know if there is any other package out there more optimized for time series. The `mlp` function obtains the optimal values of lags to use, optimal number of hidden nodes and whether the series needs differencing or not.  To obtain a simple implementation of ANNs we let the software determine the optimal number of lags and hiddden nodes in a 1-layer NN with sigmoid activation functions.
+
+```{r}
+p_load(keras)
+model <- keras_model_sequential() 
+model %>% 
+  layer_dense(units = 256, activation = 'relu', input_shape = c(784)) %>% 
+  layer_dropout(rate = 0.4) %>% 
+  layer_dense(units = 128, activation = 'relu') %>%
+  layer_dropout(rate = 0.3) %>%
+  layer_dense(units = 10, activation = 'softmax')
+```
+
+
+```{r}
+p_load(nnfor)
+mlp.fit <- mlp(ts(train$Close), reps = 1, hd = 5, lags = 2)
+mlpfcast1 <-  forecast(mlp.fit,h=1)
+mlpfcast1 <- as.numeric(mlpfcast1$mean)
+mlpfcast1acc <- accuracy(mlpfcast1, test$Close[1])
+
+mlpfcast2 <-  forecast(mlp.fit,h=14)
+mlpfcast2 <- as.numeric(mlpfcast2$mean)
+mlpfcast2acc <- accuracy(mlpfcast2, test$Close)
+
+mlp.acc <- matrix(c(mlpfcast1acc[2],mlpfcast1acc[3], mlpfcast1acc[5], mlpfcast2acc[2],mlpfcast2acc[3], mlpfcast2acc[5]), nrow = 2, byrow = T)
+
+mlp.acc <-data.frame(mlp.acc)
+names(mlp.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(mlp.acc) <- c("1-day Pred Price", "14-day Pred Price")
+mlp.acc
+
+
+mlp.fitret <- mlp(ts(trainReturns$Close), reps = 1, hd = 5, lags = 6)
+mlpfcastRet <-  forecast(mlp.fitret,h=1)
+mlpfcastRet <- as.numeric(mlpfcastRet$mean)
+mlpfcastretacc <- accuracy(mlpfcastRet, testReturns$Close[1])
+
+mlpfcastRet2 <-  forecast(mlp.fitret,h=14)
+mlpfcastRet2 <- as.numeric(mlpfcastRet2$mean)
+mlpfcastret2acc <- accuracy(mlpfcastRet2, testReturns$Close)
+
+mlpret.acc <- matrix(c(mlpfcastretacc[2],mlpfcastretacc[3], mlpfcastretacc[5], mlpfcastret2acc[2],mlpfcastret2acc[3], mlpfcastret2acc[5]), nrow = 2, byrow = T)
+
+mlpret.acc <-data.frame(mlpret.acc)
+names(mlpret.acc) <- c('RMSE', 'MAE', 'MAPE')
+row.names(mlpret.acc) <- c("1-day Pred Returns", "14-day Pred Returns")
+mlpret.acc
+```
+
+
+## Support Vector Machines
+From Wikipedia: In machine learning, support vector machines (SVMs, also support vector networks[1]) are supervised learning models with associated learning algorithms that analyze data used for classification and regression analysis. Given a set of training examples, each marked as belonging to one or the other of two categories, an SVM training algorithm builds a model that assigns new examples to one category or the other, making it a non-probabilistic binary linear classifier (although methods such as Platt scaling exist to use SVM in a probabilistic classification setting). An SVM model is a representation of the examples as points in space, mapped so that the examples of the separate categories are divided by a clear gap that is as wide as possible. New examples are then mapped into that same space and predicted to belong to a category based on which side of the gap they fall. We are using the package `svm` for this example. Feel free to let me know if there is anything else out there. 
+
+
+#### 1-day ahead prediction (PRICE):
+```{r}
+svmodel <- svm(TARGET ~ ., feature)
+svmforecast <- predict(svmodel, featuretest[1:2,])[1]
+#cat ("The NN prediction is", svmforecast)
+#cat ("The actual value is", test$Close)
+accuracy(svmforecast, test$Close[1])
+```
+
+#### 1-day ahead prediction (RETURNS):
+```{r}
+svmodelret <- svm(TARGET ~ ., featureret)
+svmforecast <- predict(svmodelret, featuretestret[1:2,])[1]
+#cat ("The NN prediction is", svmforecast)
+#cat ("The actual value is", test$Close)
+accuracy(svmforecast, testReturns$Close[1])
+```
+
+
+#### 14-day ahead prediction (PRICE):
+
+
+```{r}
+svmforecast <- predict(svmodel, featuretest)
+#cat ("The NN prediction is", svmforecast)
+#cat ("The actual value is", test$Close)
+accuracy(svmforecast, test$Close)
+
+```
+
+#### 14-day ahead prediction (RETURNS):
+```{r}
+svmodel <- svm(TARGET ~ ., featureret)
+svmforecast <- predict(svmodel, featuretestret)
+#cat ("The NN prediction is", svmforecast)
+#cat ("The actual value is", test$Close)
+accuracy(svmforecast, testReturns$Close)
+```
+
+## Ensemble Methods
+
+Ensemble models refer to methods that combine single classifiers. The output of an ensemble method is the result of fitting a base-learning algorithm to a given data set, and obtaining diverse answers by reweighting the observations 
+
+### Boosting
+
+Boosting refers to the idea of converting a weak learning algorithm into a strong learner, that is, taking a classifier that performs slightly better than random chance and improving (boosting) it into a classifier with arbitrarily high accuracy. Gradient boosting is a machine learning technique for regression and classification problems, which produces a prediction model in the form of an ensemble of weak prediction models, typically decision trees. It builds the model in a stage-wise fashion like other boosting methods do, and it generalizes them by allowing optimization of an arbitrary differentiable loss function. The implementation we are using here is based on the package `forecastxgb` specifically designed to predict a time series with an Extreme Gradient Boosting Machine.
+
+#### 1-day ahead prediction (PRICE):
+
+```{r}
+xgbmodel <- xgbar(ts(train$Close),trend_method = "differencing", seas_method = "fourier")
+  #### XGB Prediction
+xgbfcast  <- as.numeric(forecast(xgbmodel, h = 1)$mean)
+#cat ("The NN prediction is", xgbfcast)
+#cat ("The actual value is", test$Close[1])
+accuracy(xgbfcast, test$Close[1])
+```
+
+#### 1-day ahead prediction (RETURN):
+```{r}
+xgbmodelRet <- xgbar(ts(rev(trainReturns$Close)),trend_method = "differencing", seas_method = "fourier")
+  #### XGB Prediction
+xgbfcastRet  <- as.numeric(forecast(xgbmodelRet, h = 1)$mean)
+#cat ("The NN prediction is", xgbfcastRet)
+#cat ("The actual value is", testReturns$Close[1])
+accuracy(xgbfcastRet, testReturns$Close[1])
+```
+
+
+
+#### 14-day ahead prediction (PRICE):
+
+```{r}
+xgbfcast  <- as.numeric(forecast(xgbmodel, h = 14)$mean)
+#cat ("The NN prediction is", xgbfcast)
+#cat ("The actual value is", test$Close)
+accuracy(xgbfcast, test$Close)
+```
+
+#### 14-day ahead prediction (RETURN):
+```{r}
+  #### XGB Prediction
+xgbfcastRet  <- as.numeric(forecast(xgbmodelRet, h = 14)$mean)
+#cat ("The NN prediction is", xgbfcastRet)
+#cat ("The actual value is", testReturns$Close)
+accuracy(xgbfcastRet, testReturns$Close)
+```
+
+
+
+
+### Random Forest Regression
+
+The Random Forest Regression method is a generalization of the random forest regression (ensemble model of decision trees), which gives an approximation of the conditional mean of a response variable.  We can define a random forest (RF) as a "classifier consisting of a collection of tree structured classifiers ${h(\textbf{x},\theta_t),t=1,...,T}$, where ${\theta_t}$ are independently and identically distributed random vectors." The prediction of random forests for a new data point $X = x$ is the averaged response of all $T$ trees, and for each tree, the prediction of a particular value $x_i$ is based on the average values of $Y$ of the rectangular space $R_l$,  for the leaf $l$ that $x_i$  belongs to under tree $h_t$. Random forests are widely used in data mining and stock market prediction studies. Random Forests overcome the overfitting problems of a single decision tree,  becoming a powerful method to analyze high-dimensional regression problems.  The QRF method adds quantile estimation to the random forests method by recording the number of observations in each leaf $l$ and assigning a weight to each observation based on the weight of its prediction on each tree. The Quantile Regression Forest (QRF) method estimates the quantiles of $Y$ for a given value of  $\textbf{x}$. For the purposes of this research, we will estimate the mean. The QRF method is implemented in the quantregForest R package, and the reader is referred to \cite{meinshausen2006quantile} for more details. The QRF model is used to develop the prediction model due to its superior performance compared with other decision tree based algorithms. We can use the package `quantregForest` and the lagged observations as predictors. Note the results for a random forest change everytime the `quantregForest` function is called due to the randomness of the variables selected.
+
+#### 1-day ahead prediction:
+```{r, message=FALSE}
+# library(quantregForest)
+# myTimeControl <- trainControl(method = "timeslice",
+#                               initialWindow = 48,
+#                               horizon = 1,
+#                               fixedWindow = TRUE)
+# qrf <- quantregForest(x=feature[,1:10],y=feature[,11],
+#                         importance = TRUE, quantiles=0.5, keep.inbag = TRUE,nodesize = 10, control =myTimeControl)
+# 
+# qr.predict <- predict(qrf,newdata= featuretest[1:2,], what=mean)[1]
+# 
+# 
+# #cat ("The NN prediction is", svmforecast)
+# #cat ("The actual value is", test$Close)
+# accuracy(qr.predict, test$Close[1])
+```
+
+
+#### 10-day ahead prediction:
+```{r}
+# myTimeControl <- trainControl(method = "timeslice",
+#                               initialWindow = 48,
+#                               horizon = 10,
+#                               fixedWindow = TRUE)
+# qrf <- quantregForest(x=feature[,1:10],y=feature[,11],
+#                         importance = TRUE, quantiles=0.5, keep.inbag = TRUE,nodesize = 10, control =myTimeControl)
+# 
+# qr.predict <- predict(qrf,newdata= featuretest, what=mean)
+# 
+# 
+# #cat ("The NN prediction is", svmforecast)
+# #cat ("The actual value is", test$Close)
+# accuracy(qr.predict, test$Close)
+```
+
+
+
+
+
+
