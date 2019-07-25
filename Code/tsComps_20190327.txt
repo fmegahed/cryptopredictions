@@ -1,0 +1,156 @@
+
+#install.packages('pacman')
+library(pacman)
+p_load(extrafont, qrmtools, mlbench, quantregForest, qrnn, rugarch, fGarch, ggplot2,
+       anytime, xts, quantmod, timeSeries, caret, e1071, keras, reshape2,
+       forecast, forecastxgb, tidyquant)
+
+library(qrmtools)
+library(tidyquant)
+library(caret)
+library(mlbench)
+library(quantregForest)
+library(qrnn)
+library(rugarch)
+library(rsample)
+library(forecast)
+library(rugarch)
+library(fGarch)
+library(ggplot2)
+library(anytime)
+library(xts)
+library(quantmod)
+library(timeSeries)
+library(e1071)
+library(forecastxgb) # if not installed, use devtools
+#devtools::install_github("ellisp/forecastxgb-r-package/pkg")
+library(keras)
+library(reshape2)
+
+library(extrafont)
+loadfonts('win')
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+
+# Pull/load stock data----
+dat0 <- read.csv("litecoin_price.csv")
+names(dat0) <- names(dat0) %>% tolower()
+head(dat0)
+#idc <- c('AAPL', 'IBM', 'TSLA')
+#dat <- tq_get(idc) # tidyquant f_n
+
+# In case we eventually realize we need to vectorize stock info from the start
+# dat <- tibble(symbol=idc) %>%
+#   mutate(metrics = map(.x = symbol, ~ tq_get(.x)))
+# Example showing how to retrieve frist closing price
+# dat %>% filter(symbol=='IBM') %>% select(metrics) %>% unlist %>% .['metrics.close1']
+
+# find most current start date ----
+# startDate <- dat %>%
+#   group_by(symbol) %>%
+#   summarise(startDates = min(date)) %>%
+#   .$startDates %>%
+#   max()
+
+# Insert beginning of routine to process each stock ----
+# filter and sort rows based upon stock and most current start date
+dat <- dat0 %>%
+  #filter(symbol=='IBM', date >= startDate) %>%
+  select(date, close) %>%
+  mutate(date = date %>% anytime %>% as.Date) %>% 
+  arrange(date) %>% 
+  mutate(return = returns(close) %>% as.vector)
+
+# define split date for train/test sets and choose 'close' or 'return' as y
+splitDate <- "2018-02-06"
+col2Use <- 'close'
+if (col2Use=='return') dat <- dat[-1, ] # if return, 1st row NA, so drop
+
+# split train/test sets & rename chosen y column as 'ts' for uniformity hereafter
+train <- dat[ , c('date', col2Use)] %>%
+  filter(date <= splitDate)
+names(train) <- c('date', 'ts')
+test <- dat[, c('date', col2Use)] %>%
+  filter(date > splitDate)
+names(test) <- c('date', 'ts')
+
+lagsvars <- 14
+feature = data.frame(Lag(train$ts, 1:lagsvars), 
+                     Target = train$ts)[-(1:lagsvars), ]
+featuretest = data.frame(Lag(c(tail(train$ts, lagsvars), test$ts), 1:lagsvars),
+                         Target = test$ts)[-(1:lagsvars), ]
+
+#library(forecast)
+#arimamodel <- auto.arima(rev(train$ts), seasonal=FALSE)
+arimamodel <- Arima(train$ts, order = c(1,1,0))
+arimafcast1 <- forecast(arimamodel, h = 1)
+arimafcast1acc <- accuracy(arimafcast1$mean, test$ts[1])
+
+# far2 <- function(x, h){forecast(Arima(x, order = c(2,0,0)), h = h)}
+# far11 <- function(x, h){forecast(Arima(x, order = c(1,1,0)), h = h)}
+# Note: use forecast::Arima() instead of base::arima() to fit specific models
+#       that will still allow for the passing of all necessary forecast info
+
+# cross validate using test set
+fautoarima <- function(x, h){forecast(auto.arima(x, seasonal = F), h = h)}
+arima1cv <- tsCV(test$ts, fautoarima, h = 1)
+arima1cv_pre14 <- tsCV(c(tail(train$ts, 14), test$ts), fautoarima, h = 1)
+
+# value compare of CV forecast residuals to "forecast" residuals when using all data
+sqrt(mean(arima1cv^2, na.rm = T))
+sqrt(mean(residuals(fautoarima(testts, 1))^2, na.rm = T))
+# source('tsCV_full.R')
+# arima1cv_full <- tsCV_full(test$ts, fautoarima, h = 1)
+
+# checking, using all data
+arima1cv_all <- tsCV(ts(dat$close), fautoarima, h = 1)
+sqrt(mean((arima1cv_all %>% tail(14))^2, na.rm = T))
+
+# check using tsCV's 'initial' option to see if matches w/ Waldyn's train/test split results
+arimaAuto_split <- tsCV(ts(dat$close), fautoarima, h = 1, initial = 1746)
+sqrt(mean((arimaAuto_split %>% tail(14))^2, na.rm = T))
+arimaAuto_split %>% tail(14) %>% .[1] # using only 1st result from the 1-step-ahead forecast
+
+# Check if multi-setp ahead forecast is behaving as intented...likely not ---- [rdl20190326]
+#arima2cv_full <- tsCV_full(test$ts, fautoarima, h = 2)
+
+# plot of test data, autoARIMA up to 8th data pt, and autoARIMA up to 9th data pt
+# to illustrate how CV gives a clearer picture of how information changes the f_n's "mind"
+idx <- 12 # auto.arima up to 8th data point is mean only, but different thereafter
+plot(testts[1:idx])
+lines(c(NA,((testts[1:idx] - (auto.arima(testts[1:(idx)]) %>% .$residuals))[-1])),
+      lt = 2, lw = 2, col = 'red') 
+lines(c(NA,( testts[2:idx] - tsCV(testts[1:(idx)], fautoarima, 1)[1:idx-1] )),
+      lt = 3, lw = 2, col = 'blue')
+lines(c(NA,( testts[2:idx] - ((arima1cv_all %>% tail(14))[1:idx-1]) )),
+      lt = 4, lw = 2, col = 'green')
+
+# 14 day prediction 
+# arimafcast2 <- forecast(arimamodel, h = 14)
+# arimafcast2acc <- accuracy(arimafcast2$mean, test$close)
+# 
+# arima.acc <- matrix(c(arimafcast1acc[2],arimafcast1acc[3], arimafcast1acc[5],
+#                       arimafcast2acc[2],arimafcast2acc[3], arimafcast2acc[5]),
+#                     nrow = 2, byrow = T) %>% as.data.frame()
+# names(arima.acc) <- c('RMSE', 'MAE', 'MAPE')
+# row.names(arima.acc) <- c("1-day Pred Price", "14-day Pred Price")
+# arima.acc
+
+# using LSTM model ----
+# data <- as.matrix(test$ts)
+# # train and eval a basic stacked LSTM model - first try overfit approach
+# model <- keras_model_sequential()
+# model %>%
+#   layer_lstm(units            = 50, 
+#              input_shape      = list(NULL, dim(data)[[-1]]), 
+#              #recurrent_dropout = 0.5,
+#              return_sequences = TRUE) %>% 
+#   #layer_dropout(rate = 0.5) %>% 
+#   layer_lstm(units            = 20) %>% #, 
+#   #recurrent_dropout = 0.5) %>%
+#   layer_dense(units = 1)
+# model %>% compile(loss = 'mae', optimizer = optimizer_rmsprop())#optimizer_adam(lr = 0.0005))
+# # If possible, directly incorporat below in tsCV_full() (w/out use of generator?????) [rdl20190326]
+# # history = model %>% fit_generator(train_gen,
+# #                                   steps_per_epoch = 50, epochs = 7,
+# #                                   validation_data = val_gen,
+# #                                   validation_steps = val_steps)

@@ -1,0 +1,304 @@
+---
+title: "Applications of Artificial Intelligence to Financial Time Series Forecasting: An Overview and Comparison"
+date:  "`r format(Sys.time(), '%B %d, %Y')`"
+author:
+  - name: "Robert Leonard ^[Email: leonarr@miamioh.edu | Phone: +1-804-218-4362 | Website: <a href=\"https://miamioh.edu/fsb/directory/?up=/directory/leonarr\">Miami University Official</a> ]"
+    affiliation: Farmer School of Business, Miami University
+  - name: "Waldyn Martinez ^[Email: martinwg@miamioh.edu | Phone: +1-513-529-2154 | Website: <a href=\"https://miamioh.edu/fsb/directory/?up=/directory/martinwg\">Miami University Official</a> ]"
+    affiliation: Farmer School of Business, Miami University
+  - name: "Manar Mohamed ^[Email: mohamem@miamioh.edu | Phone: +1-513-529-0346 | Website: <a href=\"http://miamioh.edu/cec/academics/departments/cse/about/faculty-and-staff/mohammed-manar/index.html\">Miami University Official</a> ]"
+    affiliation: Department of Computer Science and Software Engineering, Miami University
+  - name: "Arthur Carvalho ^[Email: carvalag@miamioh.edu | Phone: +1-513-529-7162· | Website: <a href=\"http://www.users.miamioh.edu/carvalag/\">Miami University Official</a> ]"
+    affiliation: Farmer School of Business, Miami University
+  - name: "Fadel M. Megahed ^[Email: fmegahed@miamioh.edu | Phone: +1-513-529-4185 | Website: <a href=\"https://miamioh.edu/fsb/directory/?up=/directory/megahefm\">Miami University Official</a>]"
+    affiliation: Farmer School of Business, Miami University
+bibliography: refs.bib
+link-citations: yes
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE,
+                      out.width = "100%",
+                      warning = FALSE,
+                      message = FALSE) 
+```
+
+---
+
+This Markdown document is intended to serve <span style="text-decoration:underline">three</span> main purposes:
+
+* Provides the data and code that we used in our analysis. We believe that providing the code is an important step in ensuring that our analysis can be easily reproduced, which:
+  - is an important pillar of the scientific method since it facilitates the evaluation/validation of our analysis.
+  - encourages future work in this area.
+* Provides the results that we have obtained for each stage of the analysis.
+* Allows for reusing our code and reproducing our results, which in our view is a major limitation in the majority of the published literature since they do not provide code and it is often unclear what are some of the decision made in terms of data preprocessing and modeling (e.g., how they tuned their parameters).
+
+To navigate this Markdown, please feel free to use the navigation bar at the left. The reader can **show** any code chunk by clicking on the code button. We chose to make the default for the code hidden since we: (a) wanted to improve the readability of this document; and (b) assumed that the readers will not be interested in reading every code chunk. In addition, we use hyperlinks to document: (a) data sources used in the analysis, (b) repository for where we saved the results, and (c) relevant **R** programming resources.
+
+---
+
+# Data Collection
+
+The snippet below documents the list of **R** packages and functions that were used in this research. For convenience, we used the `pacman` package since it allows for installing/loading the needed packages in one step. Please make sure that the package is installed on your system using the command `install.packages("pacman")` before running this code chunk.
+
+```{r packages, cache=FALSE}
+rm(list = ls()) # clear global environment
+graphics.off() # close all graphics
+library(pacman) # needs to be installed first
+# p_load is equivalent to combining both install.packages() and library()
+p_load(tidyquant, tidyverse, rvest,
+       jsonlite, readxl, purrr,
+       RColorBrewer, naniar, plotly,
+       dataPreparation, DataExplorer,
+       tools, DT, formattable)
+```
+
+
+## Scraping Financial Time-Series Data {.tabset .tabset-fade}
+In the subsections below, we will extract the data for 500+ financial time-series, categorized into the following categories:
+
+* *Stocks*, we have extracted stocks from the following stock exchanges:
+  - New York Stock Exchange (NYSE): 150 stocks selected at random.
+  - NASDAQ: 150 stocks selected at random.
+  - London Stock Exchange (LSE): The 100 stocks in [FTSE 100 Index](https://en.wikipedia.org/wiki/FTSE_100_Index).
+  - Tokyo Stock Exchange (TSE): 100 arbitrarily selected stocks from the [Nikkei 225 Index](https://en.wikipedia.org/wiki/Nikkei_225). 
+  - Shanghai Stock Exchange (SSE): 100 arbitrarily selected stocks
+These represented the biggest five stock exchanges by market capitlization at the time of analysis (March 18, 2019).
+  
+* *Commodities, Forex, Indices and Metals*: The prices for 40 trading pairs were extracted based on [oanda](https://www.oanda.com/forex-trading/markets/live). The pairs were selected to represent:
+  - All eight commodities listed on the website.
+  - A sample of eight major indices (where, we intentionally ignored indices of stock markets that we have examined).
+  - Four major metals (gold, palladium, silver and platinum). All of these were paired to the USD.
+  - Twenty foreign exchange trading pair (primarily USD based).
+
+* *Cryptocurrencies*: Using the [cryptocompare API](https://min-api.cryptocompare.com/), we extracted the hourly prices for the top 100 cryptocurrencies by market cap (as defined by [Coin Market Cap](https://coinmarketcap.com/) on 3/18/2019 18:00 EDT). We have chosen to scrape the data on an hourly level since this allows us to analyze the time series by hour, day, or any longer time period. With the exception of stable coins (e.g., Tether), we expect this set to be more volatile than most of the other examined financial data.
+
+* *US Financial Activity Measures*: We extracted the data for all 80 [monthly US Financial Activity Measures](https://fred.stlouisfed.org/categories/32457?cid=32457&et=&ob=pv&od=desc&t=monthly). We selected this dataset since it represents an example of a monthly forecasting problem and the [FRED](https://fred.stlouisfed.org/) variables are widely used in the literature (see e.g., @weng2018macroeconomic).
+
+
+### NYSE Stocks {-}
+When we scrapped the data, the NYSE stock exchange contained 3,094 companies. We have downloaded the list of companies using the nasdaq.com website (click [here](https://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NYSE) to download the latest link). Then, we selected 150 companies randomly and used the `tq_get()` function from the **R** [tidyquant package](https://cran.r-project.org/web/packages/tidyquant/tidyquant.pdf) to download the data. The code for extracting the data is below.
+
+```{r nyse_scrape, results='asis'}
+# In this chunk, we will obtain the data for 5% of the sybmols from NYSE.
+
+# In the code below, we:
+# (A) Read csv containing NYSE company data, which is downloaded on 3-18-19
+# (B) Remove symbols containing ^ (since it gives an error in our package) &
+#     we are not looking for specific tickers so this does not matter
+# (C) Select 150 companies at random
+# (D) Just keep the symbols column and convert to a char vector
+# Results are assigned to a data frame titled nyse_sample
+nyse_sample <- read.csv("../Data/Raw/nyse-companylist.csv") %>% 
+  filter(!grepl("\\Q^\\E", Symbol))
+nyse_sample <- sample(nyse_sample[,1],size=150, replace = FALSE) %>%
+  unlist() %>% as.character()
+
+nyse_stocks <- tq_get(nyse_sample, get = "stock.prices",
+                      from = "1990-01-01",
+                      to = "2019-03-15")
+saveRDS(nyse_stocks,
+        file = "../Data/RGenerated/nyse.RDS")
+
+cat(paste("Based on our code, we have extracted the data for", length(nyse_sample), "NYSE stocks. The data was saved to an RDS file titled", "nyse.RDS, which contained", ncol(nyse_stocks), "variables/columns and", nrow(nyse_stocks), "observations. The RDS file can be accessed from our GitHub: Data -> RGenerated -> nyse.RDS."))
+```
+
+### NASDAQ Stocks {-}
+When we scrapped the data, the NASDAQ stock exchange contained 3,460 companies. We have downloaded the list of companies using the nasdaq.com website (click [here](https://www.nasdaq.com/screening/companies-by-industry.aspx?exchange=NASDAQ) to download the latest link). Then, we selected 150 companies randomly and used the `tq_get()` function from the **R** [tidyquant package](https://cran.r-project.org/web/packages/tidyquant/tidyquant.pdf) to download the data. The code for extracting the data is below.
+
+```{r nasdaq_scrape, results='asis'}
+# In this chunk, we will obtain the data 150 sybmols from NASDAQ.
+
+# The code follows exactly the same logic as the code for the NYSE scrape.
+nasdaq_sample <- read.csv("../Data/Raw/nasdaq-companylist.csv") %>% 
+  filter(!grepl("\\Q^\\E", Symbol))
+nasdaq_sample <- sample(nasdaq_sample[,1],size=150, replace = FALSE) %>%
+  unlist() %>% as.character()
+
+nasdaq_stocks <- tq_get(nasdaq_sample, get = "stock.prices",
+                      from = "1990-01-01",
+                      to = "2019-03-15")
+saveRDS(nasdaq_stocks,
+        file = "../Data/RGenerated/nasdaq.RDS")
+
+cat(paste("Based on our code, we have extracted the data for", length(nasdaq_sample), "NASDAQ stocks. The data was saved to an RDS file titled", "nasdaq.RDS, which contained", ncol(nasdaq_stocks), "variables/columns and", nrow(nasdaq_stocks), "observations. The RDS file can be accessed from our GitHub: Data -> RGenerated -> nasdaq.RDS."))
+```
+
+### LSE Stocks {-}
+We have scrapped the list of companies in the Financial Times Stock Exchange 100 Index (Footsie) using the table in [FTSE 100 Index](https://en.wikipedia.org/wiki/FTSE_100_Index). The scrapping of tickers was performed using the [rvest package](https://cran.r-project.org/web/packages/rvest/rvest.pdf). Then, we appended the ticker names with a ".L" to allow us to extract the corresponding data using the  **R** [tidyquant package](https://cran.r-project.org/web/packages/tidyquant/tidyquant.pdf) to download the data. The code for extracting the data is below.
+
+```{r lse_scrape, results='asis'}
+# In this chunk, we will obtain the data for 100 FTSE stocks
+
+data_url <- "https://en.wikipedia.org/wiki/FTSE_100_Index"
+lse_sample <- read_html(data_url) %>% 
+  html_node("#constituents") %>% html_table() %>%
+  subset(select=c(2)) %>% unlist() %>% as.character()
+lse_sample <- paste0(lse_sample,".L")
+
+lse_stocks <- tq_get(lse_sample, get = "stock.prices",
+                      from = "1990-01-01",
+                      to = "2019-03-15")
+
+saveRDS(lse_stocks,
+        file = "../Data/RGenerated/lse.RDS")
+
+cat(paste("Based on our code, we have extracted the data for", length(lse_sample), "LSE stocks. The data was saved to an RDS file titled", "lse.RDS, which contained", ncol(lse_stocks), "variables/columns and", nrow(lse_stocks), "observations. The RDS file can be accessed from our GitHub: Data -> RGenerated -> lse.RDS."))
+```
+
+### TSE Stocks {-}
+We have scrapped the stocks for 100 arbitrary companies that are table in [Nikkei 225 Index](https://en.wikipedia.org/wiki/Nikkei_225). The scrapping of tickers was performed using the [rvest package](https://cran.r-project.org/web/packages/rvest/rvest.pdf). Then, we appended the ticker names with a ".T" to allow us to extract the corresponding data using the  **R** [tidyquant package](https://cran.r-project.org/web/packages/tidyquant/tidyquant.pdf) to download the data. The code for extracting the data is below. The process is similar to the LSE (with some additional preprocessing due to how [the website](https://en.wikipedia.org/wiki/Nikkei_225) listed the companies and the fact that we are only taking a 100 company sample).
+```{r tse_scrape, results='asis'}
+# In this chunk, we will obtain the data for the 100 random stocks in the Nikkei Index.
+
+# Similar to the LSE, we use wikipedia to determine the list of companies
+# from the TSE. However, the data here is in two columns (and not in a table) thus, we needed to do some extra preprocessing.
+data_url <- "https://en.wikipedia.org/wiki/Nikkei_225"
+
+tse_1 <- read_html("https://en.wikipedia.org/wiki/Nikkei_225") %>%
+  html_nodes("#mw-content-text > div > div:nth-child(21)") %>% 
+  html_text() %>% 
+  str_extract_all(pattern = "[0-9]+") %>% unlist()
+
+tse_2 <- read_html("https://en.wikipedia.org/wiki/Nikkei_225") %>%
+  html_nodes("#mw-content-text > div > div:nth-child(22)") %>% 
+  html_text() %>% 
+  str_extract_all(pattern = "[0-9]+") %>% unlist()
+
+tse_sample <- c(tse_1, tse_2) 
+tse_sample <- sample(tse_sample, size=100, replace = FALSE)
+tse_sample <- paste0(tse_sample, ".T")
+
+# Extracting the data using tidyquant and saving it as a RDS file
+tse_stocks <- tq_get(tse_sample, get = "stock.prices",
+                      from = "1990-01-01",
+                      to = "2019-03-15")
+saveRDS(tse_stocks,
+        file = "../Data/RGenerated/tse.RDS")
+
+cat(paste("Based on our code, we have extracted the data for", length(tse_sample), "TSE stocks. The data was saved to an RDS file titled", "tse.RDS, which contained", ncol(tse_stocks), "variables/columns and", nrow(tse_stocks), "observations. The RDS file can be accessed from our GitHub: Data -> RGenerated -> tse.RDS."))
+```
+
+### SSE Stocks {-}
+When we scrapped the data, the Shanghai stock exchange contained 1,506 companies. We have downloaded the list of companies using the sse.com.cn website (click [here](http://english.sse.com.cn/listed/company/) to download the latest link). Then, we selected 100 companies randomly and used the `tq_get()` function from the **R** [tidyquant package](https://cran.r-project.org/web/packages/tidyquant/tidyquant.pdf) to download the data. The code for extracting the data is below.
+
+```{r sse_scrape, results='asis'}
+# In this chunk, we will obtain the data 100 sybmols from the SSE.
+
+# The code follows the same logic as the NYSE scrape (and the appending with ".SS" for names to extract the data from Yahoo Finance.
+sse_sample <- read.csv("../Data/Raw/sse-companylist.csv")
+sse_sample <- sample(sse_sample[,1],size=100, replace = FALSE) %>%
+  unlist() %>% as.character()
+sse_sample <- paste0(sse_sample, ".SS")
+
+sse_stocks <- tq_get(sse_sample, get = "stock.prices",
+                      from = "1990-01-01",
+                      to = "2019-03-15")
+saveRDS(sse_stocks,
+        file = "../Data/RGenerated/sse.RDS")
+
+cat(paste("Based on our code, we have extracted the data for", length(sse_sample), "SSE stocks. The data was saved to an RDS file titled", "sse.RDS, which contained", ncol(sse_stocks), "variables/columns and", nrow(sse_stocks), "observations. The RDS file can be accessed from our GitHub: Data -> RGenerated -> sse.RDS."))
+```
+
+### Commodities, Forex, Indices & Metals {-}
+We scrapped the data for a total of forty Commodities, Forex, Indices & Metals using the `tq_get()` function from the **R** [tidyquant package](https://cran.r-project.org/web/packages/tidyquant/tidyquant.pdf). Unlike what we have done in our previous tabs, the source had to be changed to correspond to [oanda](https://www.oanda.com/forex-trading/markets/live), which can be easily done in **R** by using `get = "exchange.rates"` as an input parameter to the `tq_get()` function. 
+```{r forex_scrape, results='asis'}
+bcfm_indices <- c("XAU/USD", "XAG/USD", "XPD/USD", "XPT/USD", 
+                  "BCO/USD", "XCU/USD","CORN/USD", "NATGAS/USD",
+                  "SOYBN/USD", "SUGAR/USD", "WTICO/USD", "WHEAT/USD",
+                  "USD/CAD", "USD/CHF", "USD/CNH", "USD/CZK",
+                  "USD/DKK", "USD/HKD", "USD/HUF", "USD/INR",
+                  "USD/JPY", "USD/MXN", "USD/NOK", "USD/PLN",
+                  "USD/SAR", "USD/SEK", "USD/SGD", "USD/THB",
+                  "USD/TRY", "USD/ZAR", "EUR/GBP", "EUR/USD",
+                  "AU200/AUD", "EU50/EUR", "FR40/EUR", "HK33/HKD",
+                  "IN50/USD", "NL25/EUR", "SG30/SGD", "TWIX/USD")
+
+bcfm_prices <- tq_get(bcfm_indices, get = "exchange.rates",
+                      from = "1990-01-01",
+                      to = "2019-03-15")
+
+saveRDS(bcfm_prices,
+        file = "../Data/RGenerated/bcfm.RDS")
+
+cat(paste("Based on our code, we have extracted the data for", length(bcfm_indices), "trading pairs. The data was saved to an RDS file titled", "bcfm.RDS, which contained", ncol(bcfm_prices), "variables/columns and", nrow(bcfm_prices), "observations. The RDS file can be accessed from our GitHub: Data -> RGenerated -> bcfm.RDS."))
+
+```
+
+### Cryptocurrencies {-}
+Using the [cryptocompare API](https://min-api.cryptocompare.com/), we extracted the hourly prices for the top 100 cryptocurrencies by market cap (as of 3/18/2019 18:00 PM EDT). The ranking of the top 100 cryptocurrencies was scraped from [Coin Market Cap](https://coinmarketcap.com/). As for the [cryptocompare API](https://min-api.cryptocompare.com/) inputs, we used: (a) trading symbol to be each of our 100 coins, (b) measured in USD (which means that the BTC/USD conversion is used if the coin is not currently being traded in USD), (c) the aggregate price from all exchanges, and (d) starting date of 00:00:00 GMT on 2016-01-01 and ending date of 23:00:00 GMT on 2019-03-15. Unlike all previous tabs, the results are initially saved as a list.
+
+```{r crypto_scrape, results="asis"}
+# Loading API Key
+source("cryptocompare_api_key.R")
+
+# Crypto Currency Table (to generate top tickers)
+coin_table <-  read_html("https://coinmarketcap.com/") %>% 
+  html_node("#currencies") %>% html_table()
+saveRDS(coin_table, file = "../Data/RGenerated/cryptotable.RDS")
+
+coins <- subset(coin_table, select = c("Circulating Supply")) %>% 
+  unlist() %>% as.character() %>%  str_extract_all(pattern = "[A-Z]") %>% 
+  sapply(paste, collapse="")
+measured_in <- "USD"
+
+# Creating the inputs needed for the for loop to extract the data
+baseurl <- "https://min-api.cryptocompare.com/data/histohour?fsym="
+num_data_points <- as.character(2000) 
+first_Ts_time <- as.numeric(as.POSIXct("2016-01-01 0:00", tz="GMT")) +
+  (3600*2000)
+TimeTs <- seq(first_Ts_time, 1552694399, (3600*2000)) 
+TimeTs_include_current_time <- c(TimeTs, 1552694399)
+
+# ----------------------Two Nested for Loops for extracting the data needed-----------------------------------
+# Outer loop is for each coin and the
+# inner loop is to iterate through the API so we have the data from January 1, 2016 to March 18, 2019 (GMT Times)
+crypto <- list() # initializing the results list (made of five sub lists; one for each coin)
+for (counter in 1:length(coins)) {
+  data_holder <- {} # place holder for data, which we will overwrite
+  for (id in 1:length(TimeTs_include_current_time)) {
+    api_call <- paste(baseurl,coins[counter],"&tsym=",measured_in,"&limit=",
+                      num_data_points,"&aggregate=1&toTs=",
+                      TimeTs_include_current_time[id],
+                      "&api_key=", api_key, sep="") # api call with prespecified parameters
+    data_holder <- rbind(data_holder,fromJSON(api_call)$Data) # R Binding the data (to create one large df per coin)
+    Sys.sleep(1) # Pause 1 second
+  }
+  crypto[[counter]] <- data_holder # A list of results time, close, high, open, volume
+}
+
+saveRDS(crypto,
+        file = "../Data/RGenerated/crypto.RDS")
+
+cat(paste("Based on our code, we have extracted the data for", length(coins), "trading pairs. The data was saved to an RDS file titled", "crypto.RDS, which contained a list of 100 crypto currencies measured in USD. Per the API, if there is no direct USD pairing, BTC/USD pricing is used for the conversion. The RDS file can be accessed from our GitHub: Data -> RGenerated -> crypto.RDS."))
+```
+
+### US Financial Activity Measures {-}
+From the [US Federal Reserve](https://fred.stlouisfed.org), we downloaded an Excel file containing 80 [monthly US Financial Activity Measures](https://fred.stlouisfed.org/categories/32457?cid=32457&et=&ob=pv&od=desc&t=monthly). We read the column names from the Excel and used as "ticker" inputs in the `tq_get()` function from the **R** [tidyquant package](https://cran.r-project.org/web/packages/tidyquant/tidyquant.pdf). The source had to be changed to correspond to [fred](https://fred.stlouisfed.org), which was done in **R** by using `get = "economic.data"` as an input parameter to the `tq_get()` function. 
+
+```{r macro, results="asis"}
+macro_indicators <- read_xls(path = "../Data/Raw/finindicators.xls", 
+                               sheet = "Monthly") %>% colnames()
+macro_indicators <- macro_indicators[-1] # Dropping the first element (Date) 
+
+macro <- tq_get(macro_indicators, get = "economic.data", 
+                from = "1990-01-01", to = "2019-03-15")
+
+saveRDS(macro,
+        file = "../Data/RGenerated/macro.RDS")
+
+cat(paste("Based on our code, we have extracted the data for", length(macro_indicators), "US financial activity measures. The data was saved to an RDS file titled", "macro.RDS, which contained", ncol(macro), "variables/columns and", nrow(macro), "observations. The RDS file can be accessed from our GitHub: Data -> RGenerated -> macro.RDS."))
+```
+
+---
+
+# References{-}
+
